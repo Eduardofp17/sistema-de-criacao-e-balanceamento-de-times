@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: times-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: balanceamento_times
+      POSTGRES_USER: times
+      POSTGRES_PASSWORD: times
+      TZ: America/Fortaleza
+      PGTZ: America/Fortaleza
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U times -d balanceamento_times"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
