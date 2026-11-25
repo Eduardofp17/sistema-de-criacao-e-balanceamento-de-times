@@ -9,6 +9,8 @@ import java.util.Scanner;
 import br.ufersa.scbt.db.ConexaoBD;
 import br.ufersa.scbt.modelo.Esporte;
 import br.ufersa.scbt.modelo.Grupo;
+import br.ufersa.scbt.modelo.Habilidade;
+import br.ufersa.scbt.modelo.Participacao;
 import br.ufersa.scbt.modelo.Usuario;
 
 public class App {
@@ -203,31 +205,46 @@ public class App {
       System.out.println("Criador: " + grupo.getCriador().getNome());
       System.out.println("Criado em: " + grupo.getDataCriacao() + " às " + grupo.getHoraCriacao());
 
-      if (!administrador) {
-        System.out.println();
-        System.out.println("Apenas o administrador pode alterar o grupo.");
-        System.out.println("0 - Voltar");
+      System.out.println();
+      System.out.println("1 - Ver participantes");
+      System.out.println("2 - Sair do grupo");
 
-        if (lerOpcao() == 0) {
-          return;
-        }
-
-        continue;
+      if (administrador) {
+        System.out.println("3 - Adicionar participante");
+        System.out.println("4 - Remover participante");
+        System.out.println("5 - Definir habilidade");
+        System.out.println("6 - Editar grupo");
+        System.out.println("7 - Editar modalidade");
+        System.out.println("8 - Transferir administração");
+        System.out.println("9 - Excluir grupo");
+      } else {
+        System.out.println("(Apenas o administrador pode alterar o grupo.)");
       }
 
-      System.out.println();
-      System.out.println("1 - Editar grupo");
-      System.out.println("2 - Editar modalidade");
-      System.out.println("3 - Transferir administração");
-      System.out.println("4 - Excluir grupo");
       System.out.println("0 - Voltar");
 
       try {
-        switch (lerOpcao()) {
-          case 1 -> editarGrupo(grupo);
-          case 2 -> editarModalidade(grupo);
-          case 3 -> transferirAdministracao(grupo);
-          case 4 -> {
+        int opcao = lerOpcao();
+
+        if (opcao > 2 && !administrador) {
+          System.out.println("Opção inválida.");
+          continue;
+        }
+
+        switch (opcao) {
+          case 1 -> verParticipantes(grupo);
+          case 2 -> {
+            if (sairDoGrupo(usuario, grupo)) {
+              return;
+            }
+          }
+          case 3 -> adicionarParticipante(grupo);
+          case 4 -> removerParticipante(usuario, grupo);
+          case 5 -> definirHabilidade(grupo);
+          case 6 -> editarGrupo(grupo);
+          case 7 -> editarModalidade(grupo);
+          case 8 -> transferirAdministracao(grupo);
+          case 9 -> {
             if (excluirGrupo(grupo)) {
               return;
             }
@@ -237,10 +254,98 @@ public class App {
           }
           default -> System.out.println("Opção inválida.");
         }
+
+        Grupo atualizado = Grupo.consultar(grupo.getNome());
+
+        if (atualizado == null) {
+          return;
+        }
+
+        grupo = atualizado;
       } catch (RuntimeException e) {
         mostrarErro(e);
       }
     }
+  }
+
+  private static void verParticipantes(Grupo grupo) {
+    System.out.println();
+    System.out.println("--- Participantes (do mais antigo ao mais novo) ---");
+
+    for (Participacao participacao : Participacao.listarPorGrupo(grupo)) {
+      Usuario participante = participacao.getUsuario();
+      Habilidade habilidade = Habilidade.consultar(participante, grupo.getEsporte());
+      String valor = habilidade == null || habilidade.getValor() == 0 ? "não definida" : String.valueOf(habilidade.getValor());
+      String admin = participante.getId() == grupo.getAdministrador().getId() ? " [admin]" : "";
+
+      System.out.println("- " + participante.getNome() + " (@" + participante.getUsername() + ")" + admin
+          + " | habilidade: " + valor
+          + " | entrou em " + participacao.getDataEntrada() + " às " + participacao.getHoraEntrada());
+    }
+  }
+
+  private static void adicionarParticipante(Grupo grupo) {
+    String username = lerTexto("Username do novo participante: ");
+    Usuario participante = Usuario.consultar(username);
+
+    if (participante == null) {
+      System.out.println("Usuário não encontrado.");
+      return;
+    }
+
+    Participacao.adicionarParticipante(participante, grupo);
+    System.out.println(participante.getNome() + " foi adicionado(a) ao grupo com habilidade 0. Defina a habilidade dele(a).");
+  }
+
+  private static void removerParticipante(Usuario administrador, Grupo grupo) {
+    String username = lerTexto("Username do participante a remover: ");
+    Usuario participante = Usuario.consultar(username);
+
+    if (participante == null) {
+      System.out.println("Usuário não encontrado.");
+      return;
+    }
+
+    if (participante.getId() == administrador.getId()) {
+      System.out.println("Para remover a si mesmo, use a opção \"Sair do grupo\".");
+      return;
+    }
+
+    Participacao.excluirParticipacao(participante, grupo);
+    System.out.println(participante.getNome() + " foi removido(a) do grupo. Será preciso balancear os times novamente.");
+  }
+
+  private static boolean sairDoGrupo(Usuario usuario, Grupo grupo) {
+    String confirmacao = lerTextoOpcional("Tem certeza que deseja sair do grupo? (s/n): ");
+
+    if (!confirmacao.equalsIgnoreCase("s")) {
+      System.out.println("Saída cancelada.");
+      return false;
+    }
+
+    Participacao.excluirParticipacao(usuario, grupo);
+    System.out.println("Você saiu do grupo.");
+    return true;
+  }
+
+  private static void definirHabilidade(Grupo grupo) {
+    String username = lerTexto("Username do participante: ");
+    Usuario participante = Usuario.consultar(username);
+
+    if (participante == null) {
+      System.out.println("Usuário não encontrado.");
+      return;
+    }
+
+    Habilidade habilidade = Habilidade.consultar(participante, grupo.getEsporte());
+
+    if (habilidade == null) {
+      System.out.println(participante.getNome() + " não participa do grupo.");
+      return;
+    }
+
+    habilidade.editar(lerNumero("Habilidade de " + participante.getNome() + " (1 a 5): "));
+    System.out.println("Habilidade atualizada!");
   }
 
   private static void editarGrupo(Grupo grupo) {
