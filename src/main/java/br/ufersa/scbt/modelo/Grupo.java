@@ -137,6 +137,10 @@ public class Grupo {
     this.administrador = usuario;
   }
 
+  public List<TimeEsportivo> executarBalanceamento(List<Usuario> jogadores) {
+    return TimeEsportivo.balancear(this, jogadores);
+  }
+
   public static Grupo criar(String nome, String descricao, Esporte esporte, Usuario criador) {
     validarNome(nome);
 

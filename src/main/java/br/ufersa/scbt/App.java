@@ -3,6 +3,7 @@ package br.ufersa.scbt;
 import java.io.Console;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
@@ -11,6 +12,7 @@ import br.ufersa.scbt.modelo.Esporte;
 import br.ufersa.scbt.modelo.Grupo;
 import br.ufersa.scbt.modelo.Habilidade;
 import br.ufersa.scbt.modelo.Participacao;
+import br.ufersa.scbt.modelo.TimeEsportivo;
 import br.ufersa.scbt.modelo.Usuario;
 
 public class App {
@@ -119,6 +121,7 @@ public class App {
       System.out.println("2 - Editar perfil");
       System.out.println("3 - Meus grupos");
       System.out.println("4 - Criar grupo");
+      System.out.println("5 - Desativar conta");
       System.out.println("0 - Sair da conta");
 
       switch (lerOpcao()) {
@@ -126,11 +129,36 @@ public class App {
         case 2 -> editarPerfil(usuario);
         case 3 -> meusGrupos(usuario);
         case 4 -> criarGrupo(usuario);
+        case 5 -> {
+          if (desativarConta(usuario)) {
+            return;
+          }
+        }
         case 0 -> {
           return;
         }
         default -> System.out.println("Opção inválida.");
       }
+    }
+  }
+
+  private static boolean desativarConta(Usuario usuario) {
+    System.out.println("Ao desativar a conta, você sai de todos os seus grupos.");
+    System.out.println("Depois, a única ação disponível ao entrar será reativar a conta.");
+    String confirmacao = lerTextoOpcional("Tem certeza? (s/n): ");
+
+    if (!confirmacao.equalsIgnoreCase("s")) {
+      System.out.println("Desativação cancelada.");
+      return false;
+    }
+
+    try {
+      usuario.desativar();
+      System.out.println("Conta desativada. Até mais!");
+      return true;
+    } catch (RuntimeException e) {
+      mostrarErro(e);
+      return false;
     }
   }
 
@@ -207,16 +235,18 @@ public class App {
 
       System.out.println();
       System.out.println("1 - Ver participantes");
-      System.out.println("2 - Sair do grupo");
+      System.out.println("2 - Ver times");
+      System.out.println("3 - Sair do grupo");
 
       if (administrador) {
-        System.out.println("3 - Adicionar participante");
-        System.out.println("4 - Remover participante");
-        System.out.println("5 - Definir habilidade");
-        System.out.println("6 - Editar grupo");
-        System.out.println("7 - Editar modalidade");
-        System.out.println("8 - Transferir administração");
-        System.out.println("9 - Excluir grupo");
+        System.out.println("4 - Adicionar participante");
+        System.out.println("5 - Remover participante");
+        System.out.println("6 - Definir habilidade");
+        System.out.println("7 - Balancear times");
+        System.out.println("8 - Editar grupo");
+        System.out.println("9 - Editar modalidade");
+        System.out.println("10 - Transferir administração");
+        System.out.println("11 - Excluir grupo");
       } else {
         System.out.println("(Apenas o administrador pode alterar o grupo.)");
       }
@@ -226,25 +256,27 @@ public class App {
       try {
         int opcao = lerOpcao();
 
-        if (opcao > 2 && !administrador) {
+        if (opcao > 3 && !administrador) {
           System.out.println("Opção inválida.");
           continue;
         }
 
         switch (opcao) {
           case 1 -> verParticipantes(grupo);
-          case 2 -> {
+          case 2 -> verTimes(grupo);
+          case 3 -> {
             if (sairDoGrupo(usuario, grupo)) {
               return;
             }
           }
-          case 3 -> adicionarParticipante(grupo);
-          case 4 -> removerParticipante(usuario, grupo);
-          case 5 -> definirHabilidade(grupo);
-          case 6 -> editarGrupo(grupo);
-          case 7 -> editarModalidade(grupo);
-          case 8 -> transferirAdministracao(grupo);
-          case 9 -> {
+          case 4 -> adicionarParticipante(grupo);
+          case 5 -> removerParticipante(usuario, grupo);
+          case 6 -> definirHabilidade(grupo);
+          case 7 -> balancearTimes(grupo);
+          case 8 -> editarGrupo(grupo);
+          case 9 -> editarModalidade(grupo);
+          case 10 -> transferirAdministracao(grupo);
+          case 11 -> {
             if (excluirGrupo(grupo)) {
               return;
             }
@@ -266,6 +298,85 @@ public class App {
         mostrarErro(e);
       }
     }
+  }
+
+  private static void verTimes(Grupo grupo) {
+    List<TimeEsportivo> times = new ArrayList<>();
+
+    for (TimeEsportivo time : TimeEsportivo.listar()) {
+      if (time.getGrupo() != null && time.getGrupo().getId() == grupo.getId()) {
+        times.add(time);
+      }
+    }
+
+    System.out.println();
+
+    if (times.isEmpty()) {
+      System.out.println("Nenhum time formado. O administrador precisa balancear os times.");
+      return;
+    }
+
+    System.out.println("--- Times do último racha ---");
+    mostrarTimes(grupo, times);
+  }
+
+  private static void balancearTimes(Grupo grupo) {
+    List<Participacao> participacoes = Participacao.listarPorGrupo(grupo);
+
+    System.out.println();
+    System.out.println("--- Balancear times ---");
+
+    for (int i = 0; i < participacoes.size(); i++) {
+      Usuario participante = participacoes.get(i).getUsuario();
+      System.out.println((i + 1) + " - " + participante.getNome() + " | habilidade: " + textoHabilidade(participante, grupo));
+    }
+
+    String escolha = lerTextoOpcional("Jogadores disponíveis (números separados por vírgula, Enter = todos): ");
+    List<Usuario> jogadores = new ArrayList<>();
+
+    if (escolha.isEmpty()) {
+      for (Participacao participacao : participacoes) {
+        jogadores.add(participacao.getUsuario());
+      }
+    } else {
+      for (String parte : escolha.split(",")) {
+        int numero = converterNumero(parte);
+
+        if (numero < 1 || numero > participacoes.size()) {
+          System.out.println("Número inválido: " + numero);
+          return;
+        }
+
+        jogadores.add(participacoes.get(numero - 1).getUsuario());
+      }
+    }
+
+    List<TimeEsportivo> times = grupo.executarBalanceamento(jogadores);
+
+    System.out.println();
+    System.out.println("Times formados! (os times anteriores foram substituídos)");
+    mostrarTimes(grupo, times);
+  }
+
+  private static void mostrarTimes(Grupo grupo, List<TimeEsportivo> times) {
+    for (TimeEsportivo time : times) {
+      System.out.println();
+      System.out.println(time.getNome() + " | média de habilidade: " + String.format("%.2f", time.getMediaHabilidade()));
+
+      for (Usuario jogador : time.getJogadores()) {
+        System.out.println("  - " + jogador.getNome() + " (" + textoHabilidade(jogador, grupo) + ")");
+      }
+    }
+  }
+
+  private static String textoHabilidade(Usuario usuario, Grupo grupo) {
+    Habilidade habilidade = Habilidade.consultar(usuario, grupo.getEsporte());
+
+    if (habilidade == null || habilidade.getValor() == 0) {
+      return "não definida";
+    }
+
+    return String.valueOf(habilidade.getValor());
   }
 
   private static void verParticipantes(Grupo grupo) {
