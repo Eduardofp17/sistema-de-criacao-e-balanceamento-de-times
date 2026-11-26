@@ -82,6 +82,18 @@ public class Usuario {
     this.senha = novoHash;
   }
 
+  public void desativar() {
+    if (!ativo) {
+      throw new IllegalStateException("A conta já está inativa.");
+    }
+
+    for (Grupo grupo : Grupo.listarPorUsuario(this)) {
+      Participacao.excluirParticipacao(this, grupo);
+    }
+
+    alterarAtivo(false);
+  }
+
   public void reativar() {
     alterarAtivo(true);
   }
